@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VietSub Studio — Phụ đề tiếng Việt</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231d473a'/%3E%3Ctext x='10' y='43' font-size='32' fill='white'%3EVi%3C/text%3E%3C/svg%3E">
+  <meta name="description" content="Tạo phụ đề tiếng Việt ngay trên trình duyệt. Video không tải lên server.">
+  <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Dịch phụ đề video</p>
+      <h1>Phụ đề tiếng Việt,<br><em>sẵn sàng xem.</em></h1>
+      <p class="intro">Chọn video, nhận lời thoại và dịch sang tiếng Việt ngay trong trình duyệt. Video không tải lên server.</p>
+    </section>
+
+    <section id="preflight" class="banner hidden" role="alert">
+      <strong>Thiết bị chưa sẵn sàng</strong>
+      <ul id="preflight-list"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="upload-title">
+      <div class="card-heading">
+        <span class="step">01</span>
+        <div><h2 id="upload-title">Tạo video có phụ đề</h2><p>Whisper + model dịch chạy trên máy bạn qua WebAssembly.</p></div>
+      </div>
+
+      <form id="job-form">
+        <fieldset id="inputs">
+        <div class="options">
+          <label class="field-label">Ngôn ngữ video
+            <select id="language"><option value="zh">Tiếng Trung</option><option value="en">Tiếng Anh</option><option value="vi">Tiếng Việt (không dịch)</option></select>
+          </label>
+          <label class="field-label">Model nhận diện
+            <select id="whisper-model"><option value="tiny">Whisper tiny — nhẹ, nhanh</option><option value="base">Whisper base — chính xác hơn, nặng hơn</option></select>
+          </label>
+        </div>
+        <label class="field-label" for="api-key">OpenRouter API key <span class="optional">(tùy chọn)</span></label>
+        <div class="key-row">
+          <input id="api-key" type="password" autocomplete="off" placeholder="Để trống để dịch trên trình duyệt">
+          <button class="visibility" type="button" id="toggle-key">Hiện</button>
+        </div>
+        <p class="hint" id="key-hint">Để trống: dịch trên máy (Trung → Anh → Việt). Nếu nhập key, chỉ lời thoại được gửi trực tiếp tới OpenRouter; lỗi thì dùng model cục bộ. Key không được lưu.</p>
+
+        <div class="tabs" role="tablist">
+          <button class="tab active" type="button" data-mode="upload" role="tab" aria-selected="true">Chọn video trên máy</button>
+          <button class="tab" type="button" data-mode="link" role="tab" aria-selected="false" id="tab-link">URL video trực tiếp</button>
+        </div>
+
+        <div id="mode-upload">
+          <label class="drop-zone" for="video">
+            <input id="video" name="video" type="file" accept="video/mp4,video/webm,.mp4,.webm,.mov" required>
+            <span class="drop-icon">↑</span>
+            <strong id="file-label">Chọn video hoặc thả tệp vào đây</strong>
+            <small>MP4 (H.264/AAC), WebM hoặc MOV đọc được trên trình duyệt · tối đa 250 MB / 20 phút</small>
+          </label>
+        </div>
+
+        <div id="mode-link" class="hidden">
+          <label class="field-label" for="video-link">Liên kết video</label>
+          <input id="video-link" class="link-input" type="url" inputmode="url" placeholder="https://example.com/video.mp4" autocomplete="off">
+          <p class="hint" id="link-hint">URL phải trả về tệp video và cho phép CORS. Với Facebook/TikTok/YouTube, tải video về máy rồi chọn tệp ở tab bên cạnh.</p>
+        </div>
+        <label class="field-label srt-input" for="source-srt">SRT có sẵn (tùy chọn, bỏ qua nhận diện lời thoại)</label>
+        <input id="source-srt" type="file" accept=".srt">
+        <p class="hint">Nếu SRT đã là tiếng Việt, chọn ngôn ngữ Tiếng Việt để xem / nhúng phụ đề trực tiếp.</p>
+        <button id="submit" class="primary" type="submit">Dịch sang tiếng Việt <span>→</span></button>
+        </fieldset>
+      </form>
+
+      <p class="note">Lần đầu cần mạng để tải model từ Hugging Face (vài trăm MB). Model được cache trong trình duyệt để dùng lại; cache có thể bị trình duyệt dọn. Nên dùng Chrome/Edge trên máy tính và thử video ngắn trước.</p>
+    </section>
+
+    <section id="progress-card" class="card progress-card hidden" aria-live="polite">
+      <div class="card-heading">
+        <span class="step">02</span>
+        <div><h2 id="state-title">Đang chuẩn bị video</h2><p id="status-message">Video đang được xếp hàng chờ xử lý.</p></div>
+      </div>
+      <div class="meter"><div id="meter-fill"></div></div>
+      <p class="percent"><span id="percent">0</span>% hoàn tất</p>
+      <button id="cancel" class="secondary hidden" type="button">Hủy xử lý</button>
+    </section>
+
+    <section id="result-card" class="card result-card hidden">
+      <div class="result-check">✓</div>
+      <div class="result-copy">
+        <p class="eyebrow">Hoàn tất</p>
+        <h2>Video đã có phụ đề tiếng Việt.</h2>
+        <p id="result-note">Phụ đề đã sẵn sàng. Có thể xuất MP4 nhúng phụ đề bên dưới.</p>
+      </div>
+
+      <div class="player-wrap">
+        <video id="player" controls playsinline preload="metadata"></video>
+        <div class="player-tools">
+          <label class="switch"><input type="checkbox" id="toggle-burn"> Bản nhúng phụ đề</label>
+          <label class="switch"><input type="checkbox" id="toggle-subs" checked> Hiện phụ đề</label>
+        </div>
+      </div>
+
+      <div class="downloads">
+        <button id="burn" class="primary" type="button">Xuất MP4 có phụ đề</button>
+        <a id="video-download" class="primary hidden" href="#" download="vietsub.mp4">Tải MP4 <span>↓</span></a>
+        <a id="srt-download" class="secondary" href="#" download="vietsub.srt">Tải SRT</a>
+        <a id="vtt-download" class="secondary" href="#" download="vietsub.vtt">Tải VTT</a>
+        <button id="replay" class="secondary" type="button">Xem lại</button>
+      </div>
+    </section>
+  </main>
+
+  <footer>VietSub Studio · Client-only · Video giữ nguyên trên máy bạn</footer>
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>
